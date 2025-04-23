@@ -1,0 +1,385 @@
+library(httr2)
+library(dplyr)
+library(jsonlite)
+
+if (!file.exists("taxonomy.rds")) {
+  req <-
+    request("https://api.laji.fi") |>
+    req_url_path("v0") |>
+    req_url_path_append("taxa") |>
+    req_url_query(
+      lang = "fi",
+      langFallback = "false",
+      pageSize = 1000,
+      includeHidden = "true",
+      onlyFinnish = "true",
+      selectedFields = paste(
+        "id",
+        "scientificNameAuthorship",
+        "scientificName",
+        "taxonRank",
+        "parents",
+        "vernacularName",
+        "synonyms",
+        "subjectiveSynonyms",
+        "heterotypicSynonyms",
+        "homotypicSynonyms",
+        "objectiveSynonyms",
+        sep = ","
+      ),
+      access_token = Sys.getenv("FINBIF_ACCESS_TOKEN"),
+      page = 1
+    )
+
+  res <-
+    req_perform(req) |>
+    resp_body_json()
+
+  taxonomy <- res$results
+
+  for (i in seq_len(res$lastPage)[-1]) {
+    req <- req_url_query(req, page = i)
+
+    res <-
+      req_perform(req) |>
+      resp_body_json()
+
+    taxonomy <- c(taxonomy, res$results)
+  }
+
+  saveRDS(taxonomy, "taxonomy.rds")
+} else {
+  taxonomy <- readRDS("taxonomy.rds")
+}
+
+get_property <- function(x, name) {
+  if (hasName(x, name)) getElement(x, name)[[1]] else NA_character_
+}
+
+taxonConceptID <- vapply(taxonomy, getElement, "", "id")
+
+taxonRank <- sub("MX\\.", "", vapply(taxonomy, get_property, "", "taxonRank"))
+
+names(taxonRank) <- taxonConceptID
+
+ranks <- c(
+  "domain",
+  "kingdom",
+  "subkingdom",
+  "infrakingdom",
+  "superphylum",
+  "phylum",
+  "subphylum",
+  "superclass",
+  "class",
+  "subclass",
+  "infraclass",
+  "parvclass",
+  "superorder",
+  "order",
+  "suborder",
+  "infraorder",
+  "parvorder",
+  "superfamily",
+  "family",
+  "subfamily",
+  "tribe",
+  "subtribe",
+  "genus",
+  "subgenus",
+  "section",
+  "aggregate",
+  "species",
+  "subspecies",
+  "form",
+  "variety",
+  "cultivar"
+)
+
+get_parent_id <- function(x) {
+  for (i in rev(x$parents)) {
+    if (taxonRank[taxonConceptID == i] %in% ranks) break
+  }
+
+  if (length(i) < 1 || i == "MX.37600") {
+    NA_character_
+  } else {
+    paste0("http://tun.fi/", i)
+  }
+}
+
+get_invalid_names <- function(concept, type, status) {
+  if (hasName(concept, type)) {
+    lapply(
+      concept[[type]],
+      function(x, status, concept_id) {
+        data.frame(
+          taxonID = paste0("http://tun.fi/", x$id),
+          taxonConceptID = paste0("http://tun.fi/", concept_id),
+          taxonomicStatus = status,
+          taxonRank = sub("MX\\.", "", x$taxonRank %||% NA),
+          scientificName = x$scientificName %||% NA,
+          scientificNameAuthorship = x$scientificNameAuthorship %||% NA,
+          genericName = NA,
+          infragenericEpithet = NA,
+          specificEpithet = NA,
+          infraspecificEpithet = NA,
+          cultivarEpithet = NA,
+          acceptedNameUsageID = paste0("http://tun.fi/", concept_id),
+          parentNameUsageID = concept$parent_id
+        )
+      },
+      status,
+      concept$id
+    )
+  } else {
+    list(NULL)
+  }
+}
+
+flatten_concept <- function(x) {
+  x$parent_id <- get_parent_id(x)
+
+  do.call(
+    rbind,
+    c(
+      list(
+        data.frame(
+          taxonID = paste0("http://tun.fi/", x$id),
+          taxonConceptID = paste0("http://tun.fi/", x$id),
+          taxonomicStatus = "accepted",
+          taxonRank = sub("MX\\.", "", x$taxonRank %||% NA),
+          scientificName = x$scientificName %||% NA,
+          scientificNameAuthorship = x$scientificNameAuthorship %||% NA,
+          genericName = NA,
+          infragenericEpithet = NA,
+          specificEpithet = NA,
+          infraspecificEpithet = NA,
+          cultivarEpithet = NA,
+          acceptedNameUsageID = paste0("http://tun.fi/", x$id),
+          parentNameUsageID = x$parent_id
+        )
+      ),
+      get_invalid_names(x, "synonyms", "synonym"),
+      get_invalid_names(x, "subjectiveSynonyms", "heterotypicSynonym"),
+      get_invalid_names(x, "heterotypicSynonyms", "heterotypicSynonym"),
+      get_invalid_names(x, "objectiveSynonyms", "homotypicSynonym"),
+      get_invalid_names(x, "homotypicSynonyms", "homotypicSynonym")
+    )
+  )
+}
+
+taxonomy_flat <- do.call(rbind, lapply(taxonomy, flatten_concept))
+
+taxonomy_flat <- transform(
+  taxonomy_flat,
+  scientificName = ifelse(
+    taxonRank == "aggregate",
+    sub(
+      paste(
+        paste0(
+          " ",
+          c(
+            "coll\\.",
+            "group",
+            "-group",
+            "-type",
+            "complex",
+            "sensu lato",
+            "-ryhmä",
+            "sec\\.",
+            "s\\.l\\.",
+            "-ryhmä s\\. lat\\."
+          ),
+          "$"
+        ),
+        collapse = "|"
+      ),
+      " agg.",
+      scientificName
+    ),
+    scientificName
+  )
+)
+
+taxonomy_flat <- transform(
+  taxonomy_flat,
+  scientificName = ifelse(
+    is.na(scientificNameAuthorship),
+    scientificName,
+    paste(scientificName, scientificNameAuthorship)
+  ),
+  genericName = ifelse(
+    taxonRank %in%
+      c(
+        "genus",
+        "subgenus",
+        "section",
+        "aggregate",
+        "species",
+        "subspecies",
+        "form",
+        "variety",
+        "cultivar"
+      ),
+    vapply(
+      strsplit(scientificName, " "),
+      \(x) {
+        x <- x[grepl("^[A-Z][a-z]+$", x)]
+        if (length(x) > 0) x[[1]] else NA_character_
+      },
+      ""
+    ),
+    NA
+  ),
+  infragenericEpithet = ifelse(
+    taxonRank %in%
+      c(
+        "subgenus",
+        "section",
+        "aggregate",
+        "species",
+        "subspecies",
+        "form",
+        "variety",
+        "cultivar"
+      ),
+    vapply(
+      strsplit(scientificName, " "),
+      \(x) {
+        x <- gsub("\\(|\\)", "", x)
+        x <- x[grepl("^[A-Z][a-z]+$", x)]
+        if (length(x) > 1) x[[2]] else NA_character_
+      },
+      ""
+    ),
+    NA
+  ),
+  specificEpithet = ifelse(
+    taxonRank %in%
+      c(
+        "aggregate",
+        "species",
+        "subspecies",
+        "form",
+        "variety",
+        "cultivar"
+      ),
+    vapply(
+      strsplit(scientificName, " "),
+      \(x) {
+        x <- x[grepl("^[a-z][a-z|\\-]*$", x)]
+        if (length(x) > 0) x[[1]] else NA_character_
+      },
+      ""
+    ),
+    NA
+  ),
+  infraspecificEpithet = ifelse(
+    taxonRank %in%
+      c("subspecies", "form", "variety", "cultivar"),
+    vapply(
+      strsplit(scientificName, " "),
+      \(x) {
+        x <- x[grepl("^[a-z][a-z|\\-]*$", x)]
+        if (length(x) > 1) x[[2]] else NA_character_
+      },
+      ""
+    ),
+    NA
+  ),
+  cultivarEpithet = ifelse(
+    taxonRank == "cultivar",
+    vapply(
+      strsplit(scientificName, " "),
+      \(x) {
+        x <- x[grepl("^'", x)]
+        x <- gsub("'", "", x)
+        if (length(x) > 0) x[[1]] else NA_character_
+      },
+      ""
+    ),
+    NA
+  )
+)
+
+NameUsage <- subset(taxonomy_flat, taxonRank %in% ranks)
+NameUsage <- subset(NameUsage, !grepl("×", scientificName))
+NameUsage <- transform(
+  NameUsage,
+  taxonRank = sub("aggregate", "speciesAggregate", taxonRank)
+)
+NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
+
+write.table(
+  NameUsage,
+  "name-usage.txt",
+  quote = FALSE,
+  sep = "\t",
+  na = "",
+  row.names = FALSE
+)
+
+vernacularName <-
+  data.frame(
+    taxonID = paste0("http://tun.fi/", vapply(taxonomy, getElement, "", "id")),
+    vernacularName = vapply(taxonomy, get_property, "", "vernacularName"),
+    language = "fi",
+    countryCode = "FI"
+  ) |>
+  subset(
+    !is.na(vernacularName) &
+      vernacularName != "" &
+      !grepl("\\(alalaji", vernacularName) &
+      taxonID %in% NameUsage$taxonID
+  )
+
+write.table(
+  vernacularName,
+  "vernacular-name.txt",
+  quote = FALSE,
+  sep = "\t",
+  na = "",
+  row.names = FALSE
+)
+
+req <-
+  request("https://www.gbif.org") |>
+  req_url_path("api") |>
+  req_url_path_append("species") |>
+  req_url_path_append("search") |>
+  req_url_query(
+    dataset_key = "f95250e7-49f4-4d2e-a04e-35533dee3318",
+    issue = "PARTIALLY_PARSABLE",
+    origin = "SOURCE",
+    limit = 400,
+  )
+
+res <-
+  req_perform(req) |>
+  resp_body_json()
+
+taxonomy_flat$issue_gbif_partially_parseable <- taxonomy_flat$taxonID %in%
+  vapply(res$results, getElement, "", "taxonID")
+
+req <- req_url_query(req, issue = "SCIENTIFIC_NAME_ASSEMBLED")
+
+res <-
+  req_perform(req) |>
+  resp_body_json()
+
+taxonomy_flat$issue_gbif_scientific_name_assembled <-
+  taxonomy_flat$taxonID %in% vapply(res$results, getElement, "", "taxonID")
+
+clb_issues <- read.csv("https://api.checklistbank.org/dataset/290762/issues")
+
+for (i in unique(unlist(strsplit(clb_issues$status, ";")))) {
+  taxonomy_flat[[paste0("issue_clb_", tolower(i))]] <-
+    taxonomy_flat$taxonID %in%
+    clb_issues$ID[grepl(i, clb_issues$status, fixed = TRUE)]
+}
+
+has_issues <- filter(
+  taxonomy_flat,
+  if_any(starts_with("issue")) & taxonID %in% NameUsage$taxonID
+)
