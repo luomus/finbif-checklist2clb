@@ -383,3 +383,12 @@ has_issues <- filter(
   taxonomy_flat,
   if_any(starts_with("issue")) & taxonID %in% NameUsage$taxonID
 )
+
+write.table(
+  has_issues,
+  "hasIssues.txt",
+  quote = FALSE,
+  sep = "\t",
+  na = "",
+  row.names = FALSE
+)
