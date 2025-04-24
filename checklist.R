@@ -225,7 +225,7 @@ taxonomy_flat <- transform(
     vapply(
       strsplit(scientificName, " "),
       \(x) {
-        x <- x[grepl("^[A-Z][a-z]+$", x)]
+        x <- x[grepl("^[[:upper:]][[:lower:]]+$", x)]
         if (length(x) > 0) x[[1]] else NA_character_
       },
       ""
@@ -248,7 +248,7 @@ taxonomy_flat <- transform(
       strsplit(scientificName, " "),
       \(x) {
         x <- gsub("\\(|\\)", "", x)
-        x <- x[grepl("^[A-Z][a-z]+$", x)]
+        x <- x[grepl("^[[:upper:]][[:lower:]]+$", x)]
         if (length(x) > 1) x[[2]] else NA_character_
       },
       ""
@@ -268,7 +268,7 @@ taxonomy_flat <- transform(
     vapply(
       strsplit(scientificName, " "),
       \(x) {
-        x <- x[grepl("^[a-z][a-z|\\-]*$", x)]
+        x <- x[grepl("^[[:lower:]][[[:lower:]]|\\-]*$", x)]
         if (length(x) > 0) x[[1]] else NA_character_
       },
       ""
@@ -281,7 +281,7 @@ taxonomy_flat <- transform(
     vapply(
       strsplit(scientificName, " "),
       \(x) {
-        x <- x[grepl("^[a-z][a-z|\\-]*$", x)]
+        x <- x[grepl("^[[:lower:]][[[:lower:]]|\\-]*$", x)]
         if (length(x) > 1) x[[2]] else NA_character_
       },
       ""
