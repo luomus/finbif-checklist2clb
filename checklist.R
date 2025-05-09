@@ -199,6 +199,11 @@ taxonomy_flat <- transform(
       scientificName
     ),
     scientificName
+  ),
+  scientificNameAuthorship = ifelse(
+    taxonRank == "aggregate",
+    "",
+    scientificNameAuthorship
   )
 )
 
