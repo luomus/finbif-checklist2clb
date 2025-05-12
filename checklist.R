@@ -316,6 +316,14 @@ NameUsage <- transform(
 )
 NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 
+proParte <-
+  duplicated(NameUsage[c("scientificName", "taxonRank")]) |
+  duplicated(NameUsage[c("scientificName", "taxonRank")], fromLast = TRUE)
+
+proParte <- proParte & NameUsage$taxonomicStatus != "accepted"
+
+NameUsage$taxonomicStatus[proParte] <- "proParteSynonym"
+
 write.table(
   NameUsage,
   "name-usage.txt",
