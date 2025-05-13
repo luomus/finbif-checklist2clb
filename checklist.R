@@ -11,8 +11,8 @@ if (!file.exists("taxonomy.rds")) {
       lang = "fi",
       langFallback = "false",
       pageSize = 1000,
-      includeHidden = "true",
       onlyFinnish = "true",
+      includeHidden = "true",
       selectedFields = paste(
         "id",
         "scientificNameAuthorship",
@@ -25,6 +25,7 @@ if (!file.exists("taxonomy.rds")) {
         "heterotypicSynonyms",
         "homotypicSynonyms",
         "objectiveSynonyms",
+        "hiddenTaxon",
         sep = ","
       ),
       access_token = Sys.getenv("FINBIF_ACCESS_TOKEN"),
@@ -52,14 +53,16 @@ if (!file.exists("taxonomy.rds")) {
   taxonomy <- readRDS("taxonomy.rds")
 }
 
+
+taxonomy <- taxonomy[!vapply(taxonomy, getElement, NA, "hiddenTaxon")]
+
+taxonConceptID <- vapply(taxonomy, getElement, "", "id")
+
 get_property <- function(x, name) {
   if (hasName(x, name)) getElement(x, name)[[1]] else NA_character_
 }
 
-taxonConceptID <- vapply(taxonomy, getElement, "", "id")
-
 taxonRank <- sub("MX\\.", "", vapply(taxonomy, get_property, "", "taxonRank"))
-
 names(taxonRank) <- taxonConceptID
 
 ranks <- c(
@@ -98,7 +101,7 @@ ranks <- c(
 
 get_parent_id <- function(x) {
   for (i in rev(x$parents)) {
-    if (taxonRank[taxonConceptID == i] %in% ranks) break
+    if (isTRUE(taxonRank[taxonConceptID == i] %in% ranks)) break
   }
 
   if (length(i) < 1 || i == "MX.37600") {
@@ -170,7 +173,6 @@ flatten_concept <- function(x) {
 }
 
 taxonomy_flat <- do.call(rbind, lapply(taxonomy, flatten_concept))
-
 taxonomy_flat <- transform(
   taxonomy_flat,
   scientificName = ifelse(
@@ -202,11 +204,10 @@ taxonomy_flat <- transform(
   ),
   scientificNameAuthorship = ifelse(
     taxonRank == "aggregate",
-    "",
+    NA_character_,
     scientificNameAuthorship
   )
 )
-
 taxonomy_flat <- transform(
   taxonomy_flat,
   scientificName = ifelse(
@@ -319,9 +320,7 @@ NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 proParte <-
   duplicated(NameUsage[c("scientificName", "taxonRank")]) |
   duplicated(NameUsage[c("scientificName", "taxonRank")], fromLast = TRUE)
-
 proParte <- proParte & NameUsage$taxonomicStatus != "accepted"
-
 NameUsage$taxonomicStatus[proParte] <- "proParteSynonym"
 
 write.table(
