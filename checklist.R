@@ -53,7 +53,6 @@ if (!file.exists("taxonomy.rds")) {
   taxonomy <- readRDS("taxonomy.rds")
 }
 
-
 taxonomy <- taxonomy[!vapply(taxonomy, getElement, NA, "hiddenTaxon")]
 
 taxonConceptID <- vapply(taxonomy, getElement, "", "id")
@@ -95,8 +94,7 @@ ranks <- c(
   "species",
   "subspecies",
   "form",
-  "variety",
-  "cultivar"
+  "variety"
 )
 
 get_parent_id <- function(x) {
