@@ -125,7 +125,6 @@ get_invalid_names <- function(concept, type, status) {
           infragenericEpithet = NA,
           specificEpithet = NA,
           infraspecificEpithet = NA,
-          cultivarEpithet = NA,
           acceptedNameUsageID = paste0("http://tun.fi/", concept_id),
           parentNameUsageID = concept$parent_id
         )
@@ -156,7 +155,6 @@ flatten_concept <- function(x) {
           infragenericEpithet = NA,
           specificEpithet = NA,
           infraspecificEpithet = NA,
-          cultivarEpithet = NA,
           acceptedNameUsageID = paste0("http://tun.fi/", x$id),
           parentNameUsageID = x$parent_id
         )
@@ -291,19 +289,6 @@ taxonomy_flat <- transform(
       ""
     ),
     NA
-  ),
-  cultivarEpithet = ifelse(
-    taxonRank == "cultivar",
-    vapply(
-      strsplit(scientificName, " "),
-      \(x) {
-        x <- x[grepl("^'", x)]
-        x <- gsub("'", "", x)
-        if (length(x) > 0) x[[1]] else NA_character_
-      },
-      ""
-    ),
-    NA
   )
 )
 
@@ -353,52 +338,52 @@ write.table(
   row.names = FALSE
 )
 
-req <-
-  request("https://www.gbif.org") |>
-  req_url_path("api") |>
-  req_url_path_append("species") |>
-  req_url_path_append("search") |>
-  req_url_query(
-    dataset_key = "f95250e7-49f4-4d2e-a04e-35533dee3318",
-    issue = "PARTIALLY_PARSABLE",
-    origin = "SOURCE",
-    limit = 400,
-  )
+# req <-
+#   request("https://www.gbif.org") |>
+#   req_url_path("api") |>
+#   req_url_path_append("species") |>
+#   req_url_path_append("search") |>
+#   req_url_query(
+#     dataset_key = "f95250e7-49f4-4d2e-a04e-35533dee3318",
+#     issue = "PARTIALLY_PARSABLE",
+#     origin = "SOURCE",
+#     limit = 400,
+#   )
 
-res <-
-  req_perform(req) |>
-  resp_body_json()
+# res <-
+#   req_perform(req) |>
+#   resp_body_json()
 
-taxonomy_flat$issue_gbif_partially_parseable <- taxonomy_flat$taxonID %in%
-  vapply(res$results, getElement, "", "taxonID")
+# taxonomy_flat$issue_gbif_partially_parseable <- taxonomy_flat$taxonID %in%
+#   vapply(res$results, getElement, "", "taxonID")
 
-req <- req_url_query(req, issue = "SCIENTIFIC_NAME_ASSEMBLED")
+# req <- req_url_query(req, issue = "SCIENTIFIC_NAME_ASSEMBLED")
 
-res <-
-  req_perform(req) |>
-  resp_body_json()
+# res <-
+#   req_perform(req) |>
+#   resp_body_json()
 
-taxonomy_flat$issue_gbif_scientific_name_assembled <-
-  taxonomy_flat$taxonID %in% vapply(res$results, getElement, "", "taxonID")
+# taxonomy_flat$issue_gbif_scientific_name_assembled <-
+#   taxonomy_flat$taxonID %in% vapply(res$results, getElement, "", "taxonID")
 
-clb_issues <- read.csv("https://api.checklistbank.org/dataset/290762/issues")
+# clb_issues <- read.csv("https://api.checklistbank.org/dataset/290762/issues")
 
-for (i in unique(unlist(strsplit(clb_issues$status, ";")))) {
-  taxonomy_flat[[paste0("issue_clb_", tolower(i))]] <-
-    taxonomy_flat$taxonID %in%
-    clb_issues$ID[grepl(i, clb_issues$status, fixed = TRUE)]
-}
+# for (i in unique(unlist(strsplit(clb_issues$status, ";")))) {
+#   taxonomy_flat[[paste0("issue_clb_", tolower(i))]] <-
+#     taxonomy_flat$taxonID %in%
+#     clb_issues$ID[grepl(i, clb_issues$status, fixed = TRUE)]
+# }
 
-has_issues <- filter(
-  taxonomy_flat,
-  if_any(starts_with("issue")) & taxonID %in% NameUsage$taxonID
-)
+# has_issues <- filter(
+#   taxonomy_flat,
+#   if_any(starts_with("issue")) & taxonID %in% NameUsage$taxonID
+# )
 
-write.table(
-  has_issues,
-  "hasIssues.txt",
-  quote = FALSE,
-  sep = "\t",
-  na = "",
-  row.names = FALSE
-)
+# write.table(
+#   has_issues,
+#   "hasIssues.txt",
+#   quote = FALSE,
+#   sep = "\t",
+#   na = "",
+#   row.names = FALSE
+# )
