@@ -1,7 +1,122 @@
+# Dependencies
 library(httr2)
 library(dplyr)
 library(jsonlite)
 
+# Helper functions
+get_property <- function(x, name) {
+  if (hasName(x, name)) getElement(x, name)[[1]] else NA_character_
+}
+
+get_parent_id <- function(x) {
+  for (i in rev(x$parents)) {
+    if (isTRUE(taxonRank[taxonConceptID == i] %in% ranks)) break
+  }
+
+  if (length(i) < 1 || i == "MX.37600") {
+    NA_character_
+  } else {
+    paste0("http://tun.fi/", i)
+  }
+}
+
+get_invalid_names <- function(concept, type, status) {
+  if (hasName(concept, type)) {
+    lapply(
+      concept[[type]],
+      function(x, status, concept_id) {
+        data.frame(
+          taxonID = paste0("http://tun.fi/", x$id),
+          taxonConceptID = paste0("http://tun.fi/", concept_id),
+          taxonomicStatus = status,
+          taxonRank = sub("MX\\.", "", x$taxonRank %||% NA),
+          scientificName = x$scientificName %||% NA,
+          scientificNameAuthorship = x$scientificNameAuthorship %||% NA,
+          genericName = NA,
+          infragenericEpithet = NA,
+          specificEpithet = NA,
+          infraspecificEpithet = NA,
+          acceptedNameUsageID = paste0("http://tun.fi/", concept_id),
+          acceptedNameUsage = NA,
+          parentNameUsageID = concept$parent_id,
+          parentNameUsage = NA
+        )
+      },
+      status,
+      concept$id
+    )
+  } else {
+    list(NULL)
+  }
+}
+
+flatten_concept <- function(x) {
+  x$parent_id <- get_parent_id(x)
+
+  do.call(
+    rbind,
+    c(
+      list(
+        data.frame(
+          taxonID = paste0("http://tun.fi/", x$id),
+          taxonConceptID = paste0("http://tun.fi/", x$id),
+          taxonomicStatus = "accepted",
+          taxonRank = sub("MX\\.", "", x$taxonRank %||% NA),
+          scientificName = x$scientificName %||% NA,
+          scientificNameAuthorship = x$scientificNameAuthorship %||% NA,
+          genericName = NA,
+          infragenericEpithet = NA,
+          specificEpithet = NA,
+          infraspecificEpithet = NA,
+          acceptedNameUsageID = paste0("http://tun.fi/", x$id),
+          acceptedNameUsage = NA,
+          parentNameUsageID = x$parent_id,
+          parentNameUsage = NA
+        )
+      ),
+      get_invalid_names(x, "synonyms", "synonym"),
+      get_invalid_names(x, "subjectiveSynonyms", "heterotypicSynonym"),
+      get_invalid_names(x, "heterotypicSynonyms", "heterotypicSynonym"),
+      get_invalid_names(x, "objectiveSynonyms", "homotypicSynonym"),
+      get_invalid_names(x, "homotypicSynonyms", "homotypicSynonym")
+    )
+  )
+}
+
+ranks <- c(
+  "domain",
+  "kingdom",
+  "subkingdom",
+  "infrakingdom",
+  "superphylum",
+  "phylum",
+  "subphylum",
+  "superclass",
+  "class",
+  "subclass",
+  "infraclass",
+  "parvclass",
+  "superorder",
+  "order",
+  "suborder",
+  "infraorder",
+  "parvorder",
+  "superfamily",
+  "family",
+  "subfamily",
+  "tribe",
+  "subtribe",
+  "genus",
+  "subgenus",
+  "section",
+  "aggregate",
+  "species",
+  "subspecies",
+  "form",
+  "variety"
+)
+
+# Get & cache Finnish taxonomy
 if (!file.exists("taxonomy.rds")) {
   req <-
     request("https://api.laji.fi") |>
@@ -53,121 +168,17 @@ if (!file.exists("taxonomy.rds")) {
   taxonomy <- readRDS("taxonomy.rds")
 }
 
+# Remove hidden taxa
 taxonomy <- taxonomy[!vapply(taxonomy, getElement, NA, "hiddenTaxon")]
 
+# Extract taxon concept identfiers
 taxonConceptID <- vapply(taxonomy, getElement, "", "id")
 
-get_property <- function(x, name) {
-  if (hasName(x, name)) getElement(x, name)[[1]] else NA_character_
-}
-
+# Extract taxon ranks of taxon concepts
 taxonRank <- sub("MX\\.", "", vapply(taxonomy, get_property, "", "taxonRank"))
 names(taxonRank) <- taxonConceptID
 
-ranks <- c(
-  "domain",
-  "kingdom",
-  "subkingdom",
-  "infrakingdom",
-  "superphylum",
-  "phylum",
-  "subphylum",
-  "superclass",
-  "class",
-  "subclass",
-  "infraclass",
-  "parvclass",
-  "superorder",
-  "order",
-  "suborder",
-  "infraorder",
-  "parvorder",
-  "superfamily",
-  "family",
-  "subfamily",
-  "tribe",
-  "subtribe",
-  "genus",
-  "subgenus",
-  "section",
-  "aggregate",
-  "species",
-  "subspecies",
-  "form",
-  "variety"
-)
-
-get_parent_id <- function(x) {
-  for (i in rev(x$parents)) {
-    if (isTRUE(taxonRank[taxonConceptID == i] %in% ranks)) break
-  }
-
-  if (length(i) < 1 || i == "MX.37600") {
-    NA_character_
-  } else {
-    paste0("http://tun.fi/", i)
-  }
-}
-
-get_invalid_names <- function(concept, type, status) {
-  if (hasName(concept, type)) {
-    lapply(
-      concept[[type]],
-      function(x, status, concept_id) {
-        data.frame(
-          taxonID = paste0("http://tun.fi/", x$id),
-          taxonConceptID = paste0("http://tun.fi/", concept_id),
-          taxonomicStatus = status,
-          taxonRank = sub("MX\\.", "", x$taxonRank %||% NA),
-          scientificName = x$scientificName %||% NA,
-          scientificNameAuthorship = x$scientificNameAuthorship %||% NA,
-          genericName = NA,
-          infragenericEpithet = NA,
-          specificEpithet = NA,
-          infraspecificEpithet = NA,
-          acceptedNameUsageID = paste0("http://tun.fi/", concept_id),
-          parentNameUsageID = concept$parent_id
-        )
-      },
-      status,
-      concept$id
-    )
-  } else {
-    list(NULL)
-  }
-}
-
-flatten_concept <- function(x) {
-  x$parent_id <- get_parent_id(x)
-
-  do.call(
-    rbind,
-    c(
-      list(
-        data.frame(
-          taxonID = paste0("http://tun.fi/", x$id),
-          taxonConceptID = paste0("http://tun.fi/", x$id),
-          taxonomicStatus = "accepted",
-          taxonRank = sub("MX\\.", "", x$taxonRank %||% NA),
-          scientificName = x$scientificName %||% NA,
-          scientificNameAuthorship = x$scientificNameAuthorship %||% NA,
-          genericName = NA,
-          infragenericEpithet = NA,
-          specificEpithet = NA,
-          infraspecificEpithet = NA,
-          acceptedNameUsageID = paste0("http://tun.fi/", x$id),
-          parentNameUsageID = x$parent_id
-        )
-      ),
-      get_invalid_names(x, "synonyms", "synonym"),
-      get_invalid_names(x, "subjectiveSynonyms", "heterotypicSynonym"),
-      get_invalid_names(x, "heterotypicSynonyms", "heterotypicSynonym"),
-      get_invalid_names(x, "objectiveSynonyms", "homotypicSynonym"),
-      get_invalid_names(x, "homotypicSynonyms", "homotypicSynonym")
-    )
-  )
-}
-
+# Flatten and transform the taxonomy into a single table
 taxonomy_flat <- do.call(rbind, lapply(taxonomy, flatten_concept))
 taxonomy_flat <- transform(
   taxonomy_flat,
@@ -221,8 +232,7 @@ taxonomy_flat <- transform(
         "species",
         "subspecies",
         "form",
-        "variety",
-        "cultivar"
+        "variety"
       ),
     vapply(
       strsplit(scientificName, " "),
@@ -243,8 +253,7 @@ taxonomy_flat <- transform(
         "species",
         "subspecies",
         "form",
-        "variety",
-        "cultivar"
+        "variety"
       ),
     vapply(
       strsplit(scientificName, " "),
@@ -264,13 +273,12 @@ taxonomy_flat <- transform(
         "species",
         "subspecies",
         "form",
-        "variety",
-        "cultivar"
+        "variety"
       ),
     vapply(
       strsplit(scientificName, " "),
       \(x) {
-        x <- x[grepl("^[[:lower:]][[[:lower:]]|\\-]*$", x)]
+        x <- x[grepl("^[[:lower:]]([[:lower:]]|-)*$", x)]
         if (length(x) > 0) x[[1]] else NA_character_
       },
       ""
@@ -279,11 +287,11 @@ taxonomy_flat <- transform(
   ),
   infraspecificEpithet = ifelse(
     taxonRank %in%
-      c("subspecies", "form", "variety", "cultivar"),
+      c("subspecies", "form", "variety"),
     vapply(
       strsplit(scientificName, " "),
       \(x) {
-        x <- x[grepl("^[[:lower:]][[[:lower:]]|\\-]*$", x)]
+        x <- x[grepl("^[[:lower:]]([[:lower:]]|-)*$", x)]
         if (length(x) > 1) x[[2]] else NA_character_
       },
       ""
@@ -292,6 +300,7 @@ taxonomy_flat <- transform(
   )
 )
 
+# Extract legitimate name usages from taxonomy
 NameUsage <- subset(taxonomy_flat, taxonRank %in% ranks)
 NameUsage <- subset(NameUsage, !grepl("×", scientificName))
 NameUsage <- transform(
@@ -300,12 +309,26 @@ NameUsage <- transform(
 )
 NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 
+# Find and mark potential pro parte synonyms
 proParte <-
   duplicated(NameUsage[c("scientificName", "taxonRank")]) |
   duplicated(NameUsage[c("scientificName", "taxonRank")], fromLast = TRUE)
 proParte <- proParte & NameUsage$taxonomicStatus != "accepted"
 NameUsage$taxonomicStatus[proParte] <- "proParteSynonym"
 
+# Add accepted and parent name usages
+rownames(NameUsage) <- NameUsage$taxonID
+NameUsage$acceptedNameUsage <- NameUsage[
+  NameUsage$acceptedNameUsageID,
+  "scientificName"
+]
+NameUsage$parentNameUsage <- NameUsage[
+  NameUsage$parentNameUsageID,
+  "scientificName"
+]
+rownames(NameUsage) <- NULL
+
+# Write out name usage data to a text file
 write.table(
   NameUsage,
   "name-usage.txt",
@@ -315,6 +338,7 @@ write.table(
   row.names = FALSE
 )
 
+# Extract Finnish vernacular name data
 vernacularName <-
   data.frame(
     taxonID = paste0("http://tun.fi/", vapply(taxonomy, getElement, "", "id")),
@@ -329,6 +353,7 @@ vernacularName <-
       taxonID %in% NameUsage$taxonID
   )
 
+# Write out name vernacular name to a text file
 write.table(
   vernacularName,
   "vernacular-name.txt",
@@ -382,6 +407,38 @@ write.table(
 # write.table(
 #   has_issues,
 #   "hasIssues.txt",
+#   quote = FALSE,
+#   sep = "\t",
+#   na = "",
+#   row.names = FALSE
+# )
+
+# duplicates <- transform(
+#   NameUsage,
+#   scientificName = mapply(
+#     sub,
+#     pattern = paste0(" ", scientificNameAuthorship),
+#     x = scientificName,
+#     MoreArgs = list(replacement = "", fixed = TRUE)
+#   )
+# )
+# duplicates <- duplicates[
+#   duplicated(duplicates$scientificName) |
+#     duplicated(duplicates$scientificName, fromLast = TRUE),
+# ]
+# duplicates <- duplicates[order(duplicates$scientificName), ]
+# duplicates <- transform(
+#   duplicates,
+#   taxonomicStatus = ifelse(
+#     taxonomicStatus == "accepted",
+#     taxonomicStatus,
+#     "synonym"
+#   )
+# )
+
+# write.table(
+#   duplicates,
+#   "duplicate-name-usage.txt",
 #   quote = FALSE,
 #   sep = "\t",
 #   na = "",
