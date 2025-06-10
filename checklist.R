@@ -83,6 +83,19 @@ flatten_concept <- function(x) {
   )
 }
 
+has_species <- function(id) {
+  children <- NameUsage[NameUsage$parentNameUsageID %in% id, ]
+  if (
+    any(children$taxonRank %in% c("species", "subspecies", "form", "variety"))
+  ) {
+    TRUE
+  } else if (identical(nrow(children), 0L)) {
+    FALSE
+  } else {
+    has_species(children$taxonID)
+  }
+}
+
 ranks <- c(
   "domain",
   "kingdom",
@@ -302,12 +315,10 @@ taxonomy_flat <- transform(
 
 # Extract legitimate name usages from taxonomy
 NameUsage <- subset(taxonomy_flat, taxonRank %in% ranks)
-NameUsage <- subset(NameUsage, !grepl("×", scientificName))
 NameUsage <- transform(
   NameUsage,
   taxonRank = sub("aggregate", "speciesAggregate", taxonRank)
 )
-NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 
 # Find and mark potential pro parte synonyms
 proParte <-
@@ -327,6 +338,25 @@ NameUsage$parentNameUsage <- NameUsage[
   "scientificName"
 ]
 rownames(NameUsage) <- NULL
+
+# Remove higher taxon with no species as children
+keep_taxa <- apply(
+  NameUsage,
+  1,
+  \(x) {
+    accepted <- x[["taxonomicStatus"]] == "accepted"
+    higher_taxon <-
+      !x[["taxonRank"]] %in% c("species", "subspecies", "form", "variety")
+    if (accepted & higher_taxon) {
+      has_species(x[["taxonID"]])
+    } else {
+      TRUE
+    }
+  }
+)
+
+NameUsage <- NameUsage[keep_taxa, ]
+NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 
 # Write out name usage data to a text file
 write.table(
@@ -379,7 +409,9 @@ write.table(
 #   req_perform(req) |>
 #   resp_body_json()
 
-# taxonomy_flat$issue_gbif_partially_parseable <- taxonomy_flat$taxonID %in%
+# has_issues <- NameUsage
+
+# has_issues$issue_gbif_partially_parseable <- has_issues$taxonID %in%
 #   vapply(res$results, getElement, "", "taxonID")
 
 # req <- req_url_query(req, issue = "SCIENTIFIC_NAME_ASSEMBLED")
@@ -388,21 +420,18 @@ write.table(
 #   req_perform(req) |>
 #   resp_body_json()
 
-# taxonomy_flat$issue_gbif_scientific_name_assembled <-
-#   taxonomy_flat$taxonID %in% vapply(res$results, getElement, "", "taxonID")
+# has_issues$issue_gbif_scientific_name_assembled <-
+#   has_issues$taxonID %in% vapply(res$results, getElement, "", "taxonID")
 
 # clb_issues <- read.csv("https://api.checklistbank.org/dataset/290762/issues")
 
 # for (i in unique(unlist(strsplit(clb_issues$status, ";")))) {
-#   taxonomy_flat[[paste0("issue_clb_", tolower(i))]] <-
-#     taxonomy_flat$taxonID %in%
+#   has_issues[[paste0("issue_clb_", tolower(i))]] <-
+#     has_issues$taxonID %in%
 #     clb_issues$ID[grepl(i, clb_issues$status, fixed = TRUE)]
 # }
 
-# has_issues <- filter(
-#   taxonomy_flat,
-#   if_any(starts_with("issue")) & taxonID %in% NameUsage$taxonID
-# )
+# has_issues <- filter(has_issues, if_any(starts_with("issue")))
 
 # write.table(
 #   has_issues,
