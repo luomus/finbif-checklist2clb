@@ -327,6 +327,9 @@ proParte <-
 proParte <- proParte & NameUsage$taxonomicStatus != "accepted"
 NameUsage$taxonomicStatus[proParte] <- "proParteSynonym"
 
+# Remove pro parte synonyms
+NameUsage <- subset(NameUsage, taxonomicStatus != "proParteSynonym")
+
 # Add accepted and parent name usages
 rownames(NameUsage) <- NameUsage$taxonID
 NameUsage$acceptedNameUsage <- NameUsage[
@@ -430,6 +433,13 @@ write.table(
 #     has_issues$taxonID %in%
 #     clb_issues$ID[grepl(i, clb_issues$status, fixed = TRUE)]
 # }
+
+# has_issues$issue_clb_duplicate_name <- NULL
+# has_issues$issue_clb_authorship_contains_taxonomic_note <- NULL
+# has_issues$issue_clb_synonym_rank_differs <- NULL
+# has_issues$issue_clb_citation_unparsed <- NULL
+# has_issues$issue_clb_authorship_contains_nomenclatural_note <- NULL
+# has_issues$issue_clb_rank_name_suffix_conflict <- NULL
 
 # has_issues <- filter(has_issues, if_any(starts_with("issue")))
 
