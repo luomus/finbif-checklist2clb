@@ -360,6 +360,8 @@ keep_taxa <- apply(
 
 NameUsage <- NameUsage[keep_taxa, ]
 NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
+NameUsage$acceptedNameUsage <- NULL
+NameUsage$parentNameUsage <- NULL
 
 # Write out name usage data to a text file
 write.table(
