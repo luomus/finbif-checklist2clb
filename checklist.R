@@ -342,6 +342,8 @@ NameUsage$parentNameUsage <- NameUsage[
 ]
 rownames(NameUsage) <- NULL
 
+NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
+
 # Remove higher taxon with no species as children
 keep_taxa <- apply(
   NameUsage,
