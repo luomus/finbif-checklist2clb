@@ -320,6 +320,9 @@ NameUsage <- transform(
   taxonRank = sub("aggregate", "speciesAggregate", taxonRank)
 )
 
+# Remove GBIF taxa
+NameUsage <- subset(NameUsage, !grepl("gbif", taxonID))
+
 # Find and mark potential pro parte synonyms
 proParte <-
   duplicated(NameUsage[c("scientificName", "taxonRank")]) |
