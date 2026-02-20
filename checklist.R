@@ -367,6 +367,26 @@ NameUsage <- NameUsage[keep_taxa, ]
 NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 NameUsage$acceptedNameUsage <- NULL
 NameUsage$parentNameUsage <- NULL
+row.names(NameUsage) <- NameUsage$taxonID
+
+NameUsageOld <- read.table(
+  "name-usage.txt",
+  TRUE,
+  sep = "\t",
+  quote = "",
+  na.strings = ""
+)
+
+row.names(NameUsageOld) <- NameUsageOld$taxonID
+
+new <- NameUsage[setdiff(NameUsage$taxonID, NameUsageOld$taxonID), ]
+
+removed <- NameUsage[setdiff(NameUsageOld$taxonID, NameUsage$taxonID), ]
+
+comparison <- compareDF::compare_df(
+  NameUsage[intersect(NameUsage$taxonID, NameUsageOld$taxonID), ],
+  NameUsageOld[intersect(NameUsage$taxonID, NameUsageOld$taxonID), ]
+)
 
 # Write out name usage data to a text file
 write.table(
