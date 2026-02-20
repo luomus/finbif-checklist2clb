@@ -343,7 +343,6 @@ NameUsage$parentNameUsage <- NameUsage[
   NameUsage$parentNameUsageID,
   "scientificName"
 ]
-rownames(NameUsage) <- NULL
 
 NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 
@@ -367,7 +366,6 @@ NameUsage <- NameUsage[keep_taxa, ]
 NameUsage <- subset(NameUsage, acceptedNameUsageID %in% NameUsage$taxonID)
 NameUsage$acceptedNameUsage <- NULL
 NameUsage$parentNameUsage <- NULL
-row.names(NameUsage) <- NameUsage$taxonID
 
 NameUsageOld <- read.table(
   "name-usage.txt",
