@@ -330,6 +330,15 @@ proParte <-
 proParte <- proParte & NameUsage$taxonomicStatus != "accepted"
 NameUsage$taxonomicStatus[proParte] <- "proParteSynonym"
 
+write.table(
+  subset(NameUsage, taxonomicStatus == "proParteSynonym"),
+  "duplicate-name-usage.txt",
+  quote = FALSE,
+  sep = "\t",
+  na = "",
+  row.names = FALSE
+)
+
 # Remove pro parte synonyms
 NameUsage <- subset(NameUsage, taxonomicStatus != "proParteSynonym")
 
