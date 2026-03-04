@@ -388,7 +388,7 @@ row.names(NameUsageOld) <- NameUsageOld$taxonID
 
 new <- NameUsage[setdiff(NameUsage$taxonID, NameUsageOld$taxonID), ]
 
-removed <- NameUsage[setdiff(NameUsageOld$taxonID, NameUsage$taxonID), ]
+removed <- NameUsageOld[setdiff(NameUsageOld$taxonID, NameUsage$taxonID), ]
 
 comparison <- compareDF::compare_df(
   NameUsage[intersect(NameUsage$taxonID, NameUsageOld$taxonID), ],
