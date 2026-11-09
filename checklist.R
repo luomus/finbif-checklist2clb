@@ -133,14 +133,11 @@ ranks <- c(
 if (!file.exists("taxonomy.rds")) {
   req <-
     request("https://api.laji.fi") |>
-    req_url_path("v0") |>
     req_url_path_append("taxa") |>
+    req_method("POST") |>
     req_url_query(
-      lang = "fi",
-      langFallback = "false",
+      page = 1,
       pageSize = 1000,
-      onlyFinnish = "true",
-      includeHidden = "true",
       selectedFields = paste(
         "id",
         "scientificNameAuthorship",
@@ -155,10 +152,13 @@ if (!file.exists("taxonomy.rds")) {
         "objectiveSynonyms",
         "hiddenTaxon",
         sep = ","
-      ),
-      access_token = Sys.getenv("FINBIF_ACCESS_TOKEN"),
-      page = 1
-    )
+      )
+    ) |>
+    req_headers(`API-version` = 1) |>
+    req_headers(
+      Authorization = sprintf("Bearer %s", Sys.getenv("FINBIF_ACCESS_TOKEN"))
+    ) |>
+    req_body_json(list(darkTaxon = FALSE, finnish = TRUE))
 
   res <-
     req_perform(req) |>
@@ -183,6 +183,12 @@ if (!file.exists("taxonomy.rds")) {
 
 # Remove hidden taxa
 taxonomy <- taxonomy[!vapply(taxonomy, getElement, NA, "hiddenTaxon")]
+
+# Limit to eukaryotes
+taxonomy <- c(
+  taxonomy[2],
+  taxonomy[-1:-2][vapply(taxonomy[-1:-2], \(x) "MX.53761" %in% x$parents, NA)]
+)
 
 # Extract taxon concept identfiers
 taxonConceptID <- vapply(taxonomy, getElement, "", "id")
@@ -394,6 +400,8 @@ comparison <- compareDF::compare_df(
   NameUsage[intersect(NameUsage$taxonID, NameUsageOld$taxonID), ],
   NameUsageOld[intersect(NameUsage$taxonID, NameUsageOld$taxonID), ]
 )
+
+NameUsage <- NameUsage[!row.names(NameUsage) %in% "http://tun.fi/MX.5130424", ]
 
 # Write out name usage data to a text file
 write.table(
