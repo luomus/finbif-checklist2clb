@@ -215,7 +215,6 @@ taxonomy_flat <- transform(
             "complex",
             "sensu lato",
             "-ryhmä",
-            "sec\\.",
             "s\\.l\\.",
             "-ryhmä s\\. lat\\."
           ),
