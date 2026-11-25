@@ -398,7 +398,7 @@
     },
     "curl": {
       "Package": "curl",
-      "Version": "8.1.0",
+      "Version": "8.2.0",
       "Source": "Repository",
       "Type": "Package",
       "Title": "A Modern and Flexible Web Client for R",
@@ -1940,7 +1940,7 @@
     },
     "tinytex": {
       "Package": "tinytex",
-      "Version": "0.61",
+      "Version": "0.62",
       "Source": "Repository",
       "Type": "Package",
       "Title": "Helper Functions to Install and Maintain TeX Live, and Compile LaTeX Documents",
